@@ -45,7 +45,10 @@ impl Model {
     pub fn register(name: &str, bmp: Bitmap, box_descs: Vec<BoxDesc>) {
         debug!("registering {}", name);
 
-        let mut vertices = Box::pin(vec![unsafe { mem::zeroed() }; MODEL_BOX_VERTICES as usize]);
+        let mut vertices = Box::pin(vec![
+            unsafe { mem::zeroed() };
+            box_descs.len() * MODEL_BOX_VERTICES as usize
+        ]);
 
         let default_tex_texture = Self::create_gfx_texture(bmp);
         let (mut default_tex, default_tex_name) = Self::create_model_tex(
@@ -140,14 +143,16 @@ impl Model {
             );
             let mut model_parts = Vec::new();
 
-            for desc in &self.box_descs {
+            for desc in self.box_descs.drain(..) {
                 debug!("{:#?}", desc);
                 unsafe {
                     let mut part: ModelPart = mem::zeroed();
-                    BoxDesc_BuildBox(&mut part, &*desc);
+                    BoxDesc_BuildBox(&mut part, &desc);
                     model_parts.push(part);
                 }
             }
+
+            self.model.index = 0;
 
             self.model_parts = Some(model_parts);
         }

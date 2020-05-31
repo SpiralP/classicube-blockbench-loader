@@ -82,17 +82,10 @@ impl Blockbench {
         for e in self.bb.elements {
             parts.push(BoxDesc::from_macros(
                 BoxDesc_Tex!(
-                    e.uv_offset.map(|a| a[0]).unwrap_or(0) as _,
-                    e.uv_offset.map(|a| a[1]).unwrap_or(0) as _
+                    0, // e.uv_offset.map(|a| a[0]).unwrap_or(0) as _,
+                    0  // e.uv_offset.map(|a| a[1]).unwrap_or(0) as _
                 ),
-                BoxDesc_Box!(
-                    e.origin[0] + e.from[0],
-                    e.origin[1] + e.from[1],
-                    e.origin[2] + e.from[2],
-                    e.origin[0] + e.to[0],
-                    e.origin[1] + e.to[1],
-                    e.origin[2] + e.to[2]
-                ),
+                BoxDesc_Box!(e.from[0], e.from[1], e.from[2], e.to[0], e.to[1], e.to[2]),
             ));
         }
 
