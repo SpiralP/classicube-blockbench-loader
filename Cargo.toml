@@ -9,3 +9,6 @@ crate-type = ["cdylib"]
 
 [dependencies]
 classicube-sys = { git = "https://github.com/SpiralP/rust-classicube-sys.git" }
+error-chain = "0.12.2"
+log = "0.4.8"
+simplelog = "0.8.0"
