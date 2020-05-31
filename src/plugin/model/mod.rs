@@ -1,10 +1,13 @@
 #![allow(non_snake_case)]
 #![allow(clippy::box_vec)]
 
+mod cube;
+
+pub use self::cube::Cube;
 use classicube_sys::{
-    Bitmap, BoxDesc, BoxDesc_BuildBox, Entity, GfxResourceID, Model as CCModel, ModelPart,
+    Bitmap, BoxDesc, BoxDesc_BuildBox, Entity, GfxResourceID, Matrix, Model as CCModel, ModelPart,
     ModelTex, ModelVertex, Model_ApplyTexture, Model_DrawPart, Model_Init, Model_Register,
-    Model_RetAABB, Model_RetSize, Model_UpdateVB, OwnedGfxTexture, SKIN_TYPE_SKIN_64x64,
+    Model_RetAABB, Model_RetSize, Model_UpdateVB, OwnedGfxTexture, SKIN_TYPE_SKIN_64x64, Vec3,
     MODEL_BOX_VERTICES,
 };
 use log::*;
@@ -37,17 +40,17 @@ pub struct Model {
     default_tex_name: Pin<Box<CString>>,
     default_tex_texture: OwnedGfxTexture,
 
-    box_descs: Vec<BoxDesc>,
+    cubes: Vec<Cube>,
     model_parts: Option<Vec<ModelPart>>,
 }
 
 impl Model {
-    pub fn register(name: &str, bmp: Bitmap, box_descs: Vec<BoxDesc>) {
+    pub fn register(name: &str, bmp: Bitmap, cubes: Vec<Cube>) {
         debug!("registering {}", name);
 
         let mut vertices = Box::pin(vec![
             unsafe { mem::zeroed() };
-            box_descs.len() * MODEL_BOX_VERTICES as usize
+            cubes.len() * MODEL_BOX_VERTICES as usize
         ]);
 
         let default_tex_texture = Self::create_gfx_texture(bmp);
@@ -63,6 +66,10 @@ impl Model {
 
         unsafe {
             Model_Init(model.as_mut().get_unchecked_mut());
+
+            // TODO
+            // model.GetTransform = Some(Self::GetTransform);
+
             Model_Register(model.as_mut().get_unchecked_mut());
         }
 
@@ -74,7 +81,7 @@ impl Model {
             default_tex,
             default_tex_name,
             default_tex_texture,
-            box_descs,
+            cubes,
             model_parts: None,
         };
 
@@ -138,20 +145,17 @@ impl Model {
         if self.model_parts.is_none() {
             debug!(
                 "creating {} model parts for {}",
-                self.box_descs.len(),
+                self.cubes.len(),
                 self.name
             );
             let mut model_parts = Vec::new();
 
-            for desc in self.box_descs.drain(..) {
-                debug!("{:#?}", desc);
-                unsafe {
-                    let mut part: ModelPart = mem::zeroed();
-                    BoxDesc_BuildBox(&mut part, &desc);
-                    model_parts.push(part);
-                }
+            for cube in self.cubes.drain(..) {
+                debug!("{:#?}", cube);
+                model_parts.push(cube.build_model_part());
             }
 
+            // act like MakeModel
             self.model.index = 0;
 
             self.model_parts = Some(model_parts);
@@ -203,4 +207,8 @@ impl Model {
         let entity = &mut *entity;
         Model_RetAABB!(entity, -8.0, 0.0, -4.0, 8.0, 32.0, 4.0);
     }
+
+    // unsafe extern "C" fn GetTransform(entity: *mut Entity, pos: Vec3, m: *mut Matrix) {
+    //     //
+    // }
 }

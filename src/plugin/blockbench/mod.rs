@@ -1,7 +1,7 @@
 mod json;
 
 use self::json::BBModel;
-use super::Model;
+use super::{model::Cube, Model};
 use crate::error::*;
 use classicube_sys::{Bitmap, BoxDesc, BoxDesc_Box, BoxDesc_Tex};
 use log::*;
@@ -63,8 +63,19 @@ impl Blockbench {
             bail!("unimplemented color_type {:?}", info.color_type);
         }
 
-        for i in 0..pixels.len() {
-            pixels[i] = 255;
+        for e in &bb.elements {
+            ensure!(e.autouv == 0, "autouv not 0");
+        }
+
+        let mut found_non_zero = false;
+        for pixel in &pixels {
+            if *pixel != 0 {
+                found_non_zero = true;
+                break;
+            }
+        }
+        if !found_non_zero {
+            bail!("all 0's?");
         }
 
         Ok(Self { pixels, bb })
@@ -79,14 +90,22 @@ impl Blockbench {
 
         let mut parts = Vec::new();
 
+        // east is left
+        // top is top
         for e in self.bb.elements {
-            parts.push(BoxDesc::from_macros(
-                BoxDesc_Tex!(
-                    0, // e.uv_offset.map(|a| a[0]).unwrap_or(0) as _,
-                    0  // e.uv_offset.map(|a| a[1]).unwrap_or(0) as _
-                ),
-                BoxDesc_Box!(e.from[0], e.from[1], e.from[2], e.to[0], e.to[1], e.to[2]),
-            ));
+            let sw = (e.faces.east.uv[2] as i32 - e.faces.east.uv[0] as i32).abs();
+            let bh = (e.faces.east.uv[3] as i32 - e.faces.east.uv[1] as i32).abs();
+            let bw = (e.faces.up.uv[0] as i32 - e.faces.up.uv[2] as i32).abs();
+
+            parts.push(Cube {
+                from: e.from,
+                to: e.to,
+                tex_x: e.uv_offset.map(|a| a[0]).unwrap_or(0) as _,
+                tex_y: e.uv_offset.map(|a| a[1]).unwrap_or(0) as _,
+                tex_sides_w: sw as _,
+                tex_body_w: bw as _,
+                tex_body_h: bh as _,
+            });
         }
 
         Model::register(&self.bb.name, bmp, parts);
