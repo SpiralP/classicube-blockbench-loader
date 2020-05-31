@@ -1,12 +1,14 @@
 #![allow(non_snake_case)]
+#![allow(clippy::box_vec)]
 
 use classicube_sys::{
-    Bitmap, Entity, GfxResourceID, Gfx_SetAlphaTest, Gfx_SetTexturing, Model as CCModel, ModelTex,
-    ModelVertex, Model_Init, Model_Register, OwnedGfxTexture, PackedCol, PackedCol_Make,
-    SKIN_TYPE_SKIN_64x64, MODEL_BOX_VERTICES,
+    Bitmap, Entity, GfxResourceID, Model as CCModel, ModelTex, ModelVertex, Model_Init,
+    Model_Register, OwnedGfxTexture, SKIN_TYPE_SKIN_64x64, MODEL_BOX_VERTICES,
 };
+use log::*;
 use std::{ffi::CString, mem, os::raw::c_float, pin::Pin};
 
+#[allow(dead_code)]
 pub struct Model {
     model: Pin<Box<CCModel>>,
 
@@ -20,6 +22,8 @@ pub struct Model {
 
 impl Model {
     pub fn register(name: &str, bmp: Bitmap) -> Self {
+        debug!("registering {}", name);
+
         let mut vertices = Box::pin(vec![unsafe { mem::zeroed() }; MODEL_BOX_VERTICES as usize]);
 
         let default_tex_texture = Self::create_gfx_texture(bmp);
