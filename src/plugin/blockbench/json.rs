@@ -4,23 +4,23 @@ use std::os::raw::c_float;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BBModel {
     // meta: Meta,
-    name: String,
-    resolution: Resolution,
-    elements: Vec<Element>,
+    pub name: String,
+    pub resolution: Resolution,
+    pub elements: Vec<Element>,
     // outliner: Vec<Outline>,
-    textures: Vec<Texture>,
+    pub textures: Vec<Texture>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Texture {
-    name: String,
-    id: String,
-    particle: bool,
-    mode: TextureMode,
-    uuid: String,
+    pub name: String,
+    pub id: String,
+    pub particle: bool,
+    pub mode: TextureMode,
+    pub uuid: String,
 
     /// base64 data url
-    source: String,
+    pub source: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -31,44 +31,44 @@ pub enum TextureMode {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Resolution {
-    width: usize,
-    height: usize,
+    pub width: usize,
+    pub height: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Element {
-    name: String,
-    from: [c_float; 3],
-    to: [c_float; 3],
+    pub name: String,
+    pub from: [c_float; 3],
+    pub to: [c_float; 3],
 
     /// ??
-    autouv: usize,
+    pub autouv: usize,
 
     /// ??
-    color: usize,
+    pub color: usize,
 
     /// ??
-    locked: bool,
-    origin: [c_float; 3],
-    uv_offset: Option<[usize; 2]>,
-    faces: Faces,
-    uuid: String,
+    pub locked: bool,
+    pub origin: [c_float; 3],
+    pub uv_offset: Option<[usize; 2]>,
+    pub faces: Faces,
+    pub uuid: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Faces {
-    north: Face,
-    east: Face,
-    south: Face,
-    west: Face,
-    up: Face,
-    down: Face,
+    pub north: Face,
+    pub east: Face,
+    pub south: Face,
+    pub west: Face,
+    pub up: Face,
+    pub down: Face,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Face {
-    uv: [usize; 4],
-    texture: usize,
+    pub uv: [usize; 4],
+    pub texture: usize,
 }
 
 #[test]

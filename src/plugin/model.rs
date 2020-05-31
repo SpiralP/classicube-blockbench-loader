@@ -2,26 +2,47 @@
 #![allow(clippy::box_vec)]
 
 use classicube_sys::{
-    Bitmap, Entity, GfxResourceID, Model as CCModel, ModelTex, ModelVertex, Model_Init,
-    Model_Register, OwnedGfxTexture, SKIN_TYPE_SKIN_64x64, MODEL_BOX_VERTICES,
+    Bitmap, BoxDesc, BoxDesc_BuildBox, Entity, GfxResourceID, Model as CCModel, ModelPart,
+    ModelTex, ModelVertex, Model_ApplyTexture, Model_DrawPart, Model_Init, Model_Register,
+    Model_RetAABB, Model_RetSize, Model_UpdateVB, OwnedGfxTexture, SKIN_TYPE_SKIN_64x64,
+    MODEL_BOX_VERTICES,
 };
 use log::*;
-use std::{ffi::CString, mem, os::raw::c_float, pin::Pin};
+use std::{cell::RefCell, collections::HashMap, ffi::CString, mem, os::raw::c_float, pin::Pin};
+
+// just so we keep them alive
+thread_local!(
+    static MODELS: RefCell<HashMap<*const CCModel, Model>> = Default::default();
+);
+
+pub fn free() {
+    debug!("model::free()");
+
+    MODELS.with(|cell| {
+        let models = &mut *cell.borrow_mut();
+        models.clear();
+    });
+}
 
 #[allow(dead_code)]
 pub struct Model {
+    name: String,
+
     model: Pin<Box<CCModel>>,
 
-    name: Pin<Box<CString>>,
+    model_name: Pin<Box<CString>>,
     vertices: Pin<Box<Vec<ModelVertex>>>,
     default_tex: Pin<Box<ModelTex>>,
 
     default_tex_name: Pin<Box<CString>>,
     default_tex_texture: OwnedGfxTexture,
+
+    box_descs: Vec<BoxDesc>,
+    model_parts: Option<Vec<ModelPart>>,
 }
 
 impl Model {
-    pub fn register(name: &str, bmp: Bitmap) -> Self {
+    pub fn register(name: &str, bmp: Bitmap, box_descs: Vec<BoxDesc>) {
         debug!("registering {}", name);
 
         let mut vertices = Box::pin(vec![unsafe { mem::zeroed() }; MODEL_BOX_VERTICES as usize]);
@@ -42,18 +63,24 @@ impl Model {
             Model_Register(model.as_mut().get_unchecked_mut());
         }
 
-        Self {
+        let model = Self {
             model,
-            name: model_name,
+            name: name.to_string(),
+            model_name,
             vertices,
             default_tex,
             default_tex_name,
             default_tex_texture,
-        }
-    }
-}
+            box_descs,
+            model_parts: None,
+        };
 
-impl Model {
+        MODELS.with(move |cell| {
+            let models = &mut *cell.borrow_mut();
+            models.insert(model.model.as_ref().get_ref(), model);
+        });
+    }
+
     fn create_gfx_texture(mut bmp: Bitmap) -> OwnedGfxTexture {
         OwnedGfxTexture::create(&mut bmp, true, false)
     }
@@ -77,10 +104,10 @@ impl Model {
         vertices: &mut Pin<Box<Vec<ModelVertex>>>,
         model_tex: &mut Pin<Box<ModelTex>>,
     ) -> (Pin<Box<CCModel>>, Pin<Box<CString>>) {
-        let model_name = Box::pin(CString::new(name).unwrap());
+        let name = Box::pin(CString::new(name).unwrap());
 
         let mut model: CCModel = unsafe { mem::zeroed() };
-        model.name = model_name.as_ptr();
+        model.name = name.as_ptr();
         model.vertices = vertices.as_mut_ptr();
         model.defaultTex = unsafe { model_tex.as_mut().get_unchecked_mut() };
         model.MakeParts = Some(Self::MakeParts);
@@ -90,30 +117,85 @@ impl Model {
         model.GetCollisionSize = Some(Self::GetCollisionSize);
         model.GetPickingBounds = Some(Self::GetPickingBounds);
 
-        (Box::pin(model), model_name)
+        (Box::pin(model), name)
+    }
+
+    fn with_by_model_ptr<F, T>(ptr: *const CCModel, f: F) -> T
+    where
+        F: FnOnce(&mut Self) -> T,
+    {
+        MODELS.with(move |cell| {
+            let models = &mut *cell.borrow_mut();
+
+            f(models.get_mut(&ptr).unwrap())
+        })
+    }
+
+    fn get_model_parts(&mut self) -> &mut [ModelPart] {
+        if self.model_parts.is_none() {
+            debug!(
+                "creating {} model parts for {}",
+                self.box_descs.len(),
+                self.name
+            );
+            let mut model_parts = Vec::new();
+
+            for desc in &self.box_descs {
+                debug!("{:#?}", desc);
+                unsafe {
+                    let mut part: ModelPart = mem::zeroed();
+                    BoxDesc_BuildBox(&mut part, &*desc);
+                    model_parts.push(part);
+                }
+            }
+
+            self.model_parts = Some(model_parts);
+        }
+
+        self.model_parts.as_mut().unwrap()
     }
 
     /// Creates the ModelParts of this model and fills out vertices.
-    extern "C" fn MakeParts() {}
+    extern "C" fn MakeParts() {
+        // do nothing because we can't know which model this was
+    }
 
     /// Draws/Renders this model for the given entity.
-    extern "C" fn Draw(_entity: *mut Entity) {}
+    unsafe extern "C" fn Draw(entity: *mut Entity) {
+        let entity = &mut *entity;
+
+        Model_ApplyTexture(entity);
+
+        Self::with_by_model_ptr(entity.Model, |model| {
+            for part in model.get_model_parts() {
+                Model_DrawPart(&mut *part);
+            }
+        });
+
+        Model_UpdateVB();
+    }
 
     /// Returns height the 'nametag' gets drawn at above the entity's feet.
     extern "C" fn GetNameY(_entity: *mut Entity) -> c_float {
-        0.0
+        32.5 / 16.0
     }
 
     /// Returns height the 'eye' is located at above the entity's feet.
     extern "C" fn GetEyeY(_entity: *mut Entity) -> c_float {
-        0.0
+        26.0 / 16.0
     }
 
     /// Sets entity->Size to the collision size of this model.
-    extern "C" fn GetCollisionSize(_entity: *mut Entity) {}
+    unsafe extern "C" fn GetCollisionSize(entity: *mut Entity) {
+        let entity = &mut *entity;
+        Model_RetSize!(entity, 8.6, 28.1, 8.6);
+    }
 
     /// Sets entity->ModelAABB to the 'picking' bounds of this model.
     /// This is the AABB around the entity in which mouse clicks trigger 'interaction'.
     /// NOTE: These bounds are not transformed. (i.e. no rotation, centered around 0,0,0)
-    extern "C" fn GetPickingBounds(_entity: *mut Entity) {}
+    unsafe extern "C" fn GetPickingBounds(entity: *mut Entity) {
+        let entity = &mut *entity;
+        Model_RetAABB!(entity, -8.0, 0.0, -4.0, 8.0, 32.0, 4.0);
+    }
 }
