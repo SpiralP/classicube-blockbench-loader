@@ -3,7 +3,6 @@ use classicube_sys::{
     cc_uint16, BoxDesc_XQuad, BoxDesc_YQuad, BoxDesc_ZQuad, ModelPart, ModelPart_Init,
     Model_DrawPart, Model_DrawRotate, Models, MODEL_BOX_VERTICES,
 };
-use log::*;
 use std::{
     mem,
     os::raw::{c_float, c_int},
@@ -32,18 +31,18 @@ pub struct Cube {
 
 impl Cube {
     #[rustfmt::skip]
-    fn build_model_part(&mut self) {
+    pub fn make_part(&mut self) {
         unsafe {
             let m = &mut *Models.Active;
             let mut part: ModelPart = mem::zeroed();
 
-            let x1 = self.from[0] ;
-            let y1 = self.from[1] ;
-            let z1 = self.from[2] ;
+            let x1 = self.from[0];
+            let y1 = self.from[1];
+            let z1 = self.from[2];
 
-            let x2 = self.to[0] ;
-            let y2 = self.to[1] ;
-            let z2 = self.to[2] ;
+            let x2 = self.to[0];
+            let y2 = self.to[1];
+            let z2 = self.to[2];
 
             let x = self.tex_x;
             let y = self.tex_y;
@@ -76,23 +75,8 @@ impl Cube {
         }
     }
 
+    /// must call `make_part` first!
     pub fn draw(&mut self) {
-        if self.model_part.is_none() {
-            debug!("building model part");
-            let model = unsafe { &mut *Models.Active };
-
-            let last_index = model.index;
-
-            self.build_model_part();
-
-            // act like MakeModel
-            model.index = last_index;
-        }
-
-        self.draw_model_part();
-    }
-
-    fn draw_model_part(&mut self) {
         if let Some(rot) = self.rot {
             unsafe {
                 // TODO head last arg bool
@@ -109,29 +93,27 @@ impl Cube {
 impl Cube {
     pub fn from_bbmodel_element(e: blockbench::json::Element) -> Self {
         let from = [e.from[0] / 16.0, e.from[1] / 16.0, e.from[2] / 16.0];
-
         let to = [e.to[0] / 16.0, e.to[1] / 16.0, e.to[2] / 16.0];
 
-        let sw = (e.faces.east.uv[2] as c_int - e.faces.east.uv[0] as c_int).abs();
-        let bh = (e.faces.east.uv[3] as c_int - e.faces.east.uv[1] as c_int).abs();
-        let bw = (e.faces.up.uv[0] as c_int - e.faces.up.uv[2] as c_int).abs();
+        let tex_x = e.uv_offset.map(|a| a[0]).unwrap_or(0) as c_int;
+        let tex_y = e.uv_offset.map(|a| a[1]).unwrap_or(0) as c_int;
 
-        // let center_x = e.from[0] + (e.to[0] - e.from[0]) / 2.0;
-        // let center_y = e.from[1] + (e.to[1] - e.from[1]) / 2.0;
-        // let center_z = e.from[2] + (e.to[2] - e.from[2]) / 2.0;
+        let tex_sides_w = (e.faces.east.uv[2] as c_int - e.faces.east.uv[0] as c_int).abs();
+        let tex_body_w = (e.faces.up.uv[2] as c_int - e.faces.up.uv[0] as c_int).abs();
+        let tex_body_h = (e.faces.east.uv[3] as c_int - e.faces.east.uv[1] as c_int).abs();
 
         let pivot_origin = [e.origin[0] / 16.0, e.origin[1] / 16.0, e.origin[2] / 16.0];
 
-        let rot = e.rotation.map(|r| [180.0 - r[0], r[1], r[2]]);
+        let rot = e.rotation.map(|r| [r[0], r[1], r[2]]);
 
         Self {
             from,
             to,
-            tex_x: e.uv_offset.map(|a| a[0]).unwrap_or(0) as _,
-            tex_y: e.uv_offset.map(|a| a[1]).unwrap_or(0) as _,
-            tex_sides_w: sw as _,
-            tex_body_w: bw as _,
-            tex_body_h: bh as _,
+            tex_x,
+            tex_y,
+            tex_sides_w,
+            tex_body_w,
+            tex_body_h,
             pivot_origin,
             rot,
             model_part: None,

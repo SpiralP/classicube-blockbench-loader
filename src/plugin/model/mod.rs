@@ -6,8 +6,8 @@ mod cube;
 pub use self::cube::Cube;
 use classicube_sys::{
     Bitmap, Entity, GfxResourceID, Model as CCModel, ModelTex, ModelVertex, Model_ApplyTexture,
-    Model_Init, Model_Register, Model_RetAABB, Model_RetSize, Model_UpdateVB, OwnedGfxTexture,
-    SKIN_TYPE_SKIN_64x64, MODEL_BOX_VERTICES,
+    Model_Init, Model_Register, Model_RetAABB, Model_RetSize, Model_UpdateVB, Models,
+    OwnedGfxTexture, SKIN_TYPE_SKIN_64x64, MODEL_BOX_VERTICES,
 };
 use log::*;
 use std::{cell::RefCell, collections::HashMap, ffi::CString, mem, os::raw::c_float, pin::Pin};
@@ -61,7 +61,7 @@ impl Model {
             return;
         }
 
-        debug!("registering {} with {} cubes", name, cubes.len());
+        debug!("registering {:?} with {} parts", name, cubes.len());
 
         // something we will never reach so that `update_existing` has enough room to grow
         let mut vertices = Box::pin(vec![
@@ -146,7 +146,7 @@ impl Model {
     }
 
     pub fn update_existing(&mut self, name: &str, bmp: Bitmap, cubes: Vec<Cube>) {
-        debug!("updating existing {} with {} cubes", name, cubes.len());
+        debug!("updating existing {:?} with {} parts", name, cubes.len());
 
         for vert in self.vertices.iter_mut() {
             *vert = unsafe { mem::zeroed() };
@@ -165,6 +165,20 @@ impl Model {
         }
 
         self.cubes = cubes;
+
+        unsafe {
+            let active = Models.Active;
+            Models.Active = self.model.as_mut().get_unchecked_mut();
+            {
+                debug!("rebuilding {} parts for {:?}", self.cubes.len(), self.name);
+                for cube in &mut self.cubes {
+                    cube.make_part();
+                }
+            }
+            self.model.initalised = 1;
+            self.model.index = 0;
+            Models.Active = active;
+        }
     }
 
     fn with_by_model_ptr<F, T>(ptr: *const CCModel, f: F) -> T
@@ -179,8 +193,15 @@ impl Model {
     }
 
     /// Creates the ModelParts of this model and fills out vertices.
-    extern "C" fn MakeParts() {
-        // do nothing because we can't know which model this was
+    unsafe extern "C" fn MakeParts() {
+        let model = &mut *Models.Active;
+
+        Self::with_by_model_ptr(model, |model| {
+            debug!("building {} parts for {:?}", model.cubes.len(), model.name);
+            for cube in &mut model.cubes {
+                cube.make_part();
+            }
+        });
     }
 
     /// Draws/Renders this model for the given entity.

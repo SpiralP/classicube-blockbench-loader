@@ -17,6 +17,13 @@ impl Blockbench {
     pub fn parse_bbmodel(data: &[u8]) -> Result<Self> {
         let bb: BBModel = serde_json::from_slice(data)?;
 
+        ensure!(bb.meta.box_uv, "unimplemented: not using box_uv");
+
+        ensure!(
+            bb.textures.len() == 1,
+            "unimplemented: textures length {}",
+            bb.textures.len()
+        );
         let texture = bb.textures.get(0).chain_err(|| "no texture at index 0")?;
         // if let json::TextureMode::Bitmap = texture.mode {
         // } else {
@@ -66,7 +73,6 @@ impl Blockbench {
 
         for e in &bb.elements {
             ensure!(e.autouv == 0, "unimplemented: autouv not 0");
-            ensure!(!e.locked, "unimplemented: locked not false");
             ensure!(
                 e.name == "cube",
                 "unimplemented: different name {:?}",

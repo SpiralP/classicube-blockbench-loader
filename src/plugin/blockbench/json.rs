@@ -3,12 +3,25 @@ use std::os::raw::c_float;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct BBModel {
-    // meta: Meta,
+    pub meta: Meta,
     pub name: String,
     pub resolution: Resolution,
     pub elements: Vec<Element>,
     // outliner: Vec<Outline>,
     pub textures: Vec<Texture>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Meta {
+    pub box_uv: bool,
+    pub model_format: ModelFormat,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ModelFormat {
+    Free,
+    Bedrock,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -48,7 +61,7 @@ pub struct Element {
     pub color: usize,
 
     // so far only false?
-    pub locked: bool,
+    // pub locked: bool,
     pub rotation: Option<[c_float; 3]>,
 
     /// "Pivot Point"
