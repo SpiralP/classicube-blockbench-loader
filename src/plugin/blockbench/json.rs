@@ -41,15 +41,19 @@ pub struct Element {
     pub from: [c_float; 3],
     pub to: [c_float; 3],
 
-    /// ??
+    // so far only 0?
     pub autouv: usize,
 
-    /// ??
+    // some kind of index?
     pub color: usize,
 
-    /// ??
+    // so far only false?
     pub locked: bool,
+    pub rotation: Option<[c_float; 3]>,
+
+    /// "Pivot Point"
     pub origin: [c_float; 3],
+
     pub uv_offset: Option<[usize; 2]>,
     pub faces: Faces,
     pub uuid: String,

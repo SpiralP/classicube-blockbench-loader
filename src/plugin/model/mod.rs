@@ -5,10 +5,9 @@ mod cube;
 
 pub use self::cube::Cube;
 use classicube_sys::{
-    Bitmap, BoxDesc, BoxDesc_BuildBox, Entity, GfxResourceID, Matrix, Model as CCModel, ModelPart,
-    ModelTex, ModelVertex, Model_ApplyTexture, Model_DrawPart, Model_Init, Model_Register,
-    Model_RetAABB, Model_RetSize, Model_UpdateVB, OwnedGfxTexture, SKIN_TYPE_SKIN_64x64, Vec3,
-    MODEL_BOX_VERTICES,
+    Bitmap, Entity, GfxResourceID, Model as CCModel, ModelTex, ModelVertex, Model_ApplyTexture,
+    Model_Init, Model_Register, Model_RetAABB, Model_RetSize, Model_UpdateVB, OwnedGfxTexture,
+    SKIN_TYPE_SKIN_64x64, MODEL_BOX_VERTICES,
 };
 use log::*;
 use std::{cell::RefCell, collections::HashMap, ffi::CString, mem, os::raw::c_float, pin::Pin};
@@ -41,16 +40,33 @@ pub struct Model {
     default_tex_texture: OwnedGfxTexture,
 
     cubes: Vec<Cube>,
-    model_parts: Option<Vec<ModelPart>>,
 }
 
 impl Model {
     pub fn register(name: &str, bmp: Bitmap, cubes: Vec<Cube>) {
-        debug!("registering {}", name);
+        if let Some(ptr) = MODELS.with(move |cell| {
+            let models = &mut *cell.borrow_mut();
 
+            for (ptr, model) in models.iter_mut() {
+                if model.name == name {
+                    return Some(*ptr);
+                }
+            }
+
+            None
+        }) {
+            Self::with_by_model_ptr(ptr, |model| {
+                model.update_existing(name, bmp, cubes);
+            });
+            return;
+        }
+
+        debug!("registering {} with {} cubes", name, cubes.len());
+
+        // something we will never reach so that `update_existing` has enough room to grow
         let mut vertices = Box::pin(vec![
             unsafe { mem::zeroed() };
-            cubes.len() * MODEL_BOX_VERTICES as usize
+            256 * MODEL_BOX_VERTICES as usize
         ]);
 
         let default_tex_texture = Self::create_gfx_texture(bmp);
@@ -82,7 +98,6 @@ impl Model {
             default_tex_name,
             default_tex_texture,
             cubes,
-            model_parts: None,
         };
 
         MODELS.with(move |cell| {
@@ -130,6 +145,28 @@ impl Model {
         (Box::pin(model), name)
     }
 
+    pub fn update_existing(&mut self, name: &str, bmp: Bitmap, cubes: Vec<Cube>) {
+        debug!("updating existing {} with {} cubes", name, cubes.len());
+
+        for vert in self.vertices.iter_mut() {
+            *vert = unsafe { mem::zeroed() };
+        }
+
+        let default_tex_texture = Self::create_gfx_texture(bmp);
+        self.default_tex_texture = default_tex_texture;
+
+        unsafe {
+            self.default_tex.as_mut().get_unchecked_mut().texID =
+                self.default_tex_texture.resource_id;
+        }
+
+        unsafe {
+            Model_Init(self.model.as_mut().get_unchecked_mut());
+        }
+
+        self.cubes = cubes;
+    }
+
     fn with_by_model_ptr<F, T>(ptr: *const CCModel, f: F) -> T
     where
         F: FnOnce(&mut Self) -> T,
@@ -139,29 +176,6 @@ impl Model {
 
             f(models.get_mut(&ptr).unwrap())
         })
-    }
-
-    fn get_model_parts(&mut self) -> &mut [ModelPart] {
-        if self.model_parts.is_none() {
-            debug!(
-                "creating {} model parts for {}",
-                self.cubes.len(),
-                self.name
-            );
-            let mut model_parts = Vec::new();
-
-            for cube in self.cubes.drain(..) {
-                debug!("{:#?}", cube);
-                model_parts.push(cube.build_model_part());
-            }
-
-            // act like MakeModel
-            self.model.index = 0;
-
-            self.model_parts = Some(model_parts);
-        }
-
-        self.model_parts.as_mut().unwrap()
     }
 
     /// Creates the ModelParts of this model and fills out vertices.
@@ -176,8 +190,8 @@ impl Model {
         Model_ApplyTexture(entity);
 
         Self::with_by_model_ptr(entity.Model, |model| {
-            for part in model.get_model_parts() {
-                Model_DrawPart(&mut *part);
+            for cube in &mut model.cubes {
+                cube.draw();
             }
         });
 

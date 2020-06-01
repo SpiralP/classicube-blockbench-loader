@@ -1,9 +1,9 @@
-mod json;
+pub mod json;
 
 use self::json::BBModel;
 use super::{model::Cube, Model};
 use crate::error::*;
-use classicube_sys::{Bitmap, BoxDesc, BoxDesc_Box, BoxDesc_Tex};
+use classicube_sys::Bitmap;
 use log::*;
 use std::{io::Cursor, os::raw::c_int};
 
@@ -24,9 +24,10 @@ impl Blockbench {
         // }
 
         const DATA_URL_START: &str = "data:image/png;base64,";
-        if !texture.source.starts_with(DATA_URL_START) {
-            bail!("texture not base64 png data url");
-        }
+        ensure!(
+            texture.source.starts_with(DATA_URL_START),
+            "unimplemented: texture not base64 png data url"
+        );
 
         let base64 = &texture.source[DATA_URL_START.len()..];
         let data = base64::decode(base64)?;
@@ -43,7 +44,7 @@ impl Blockbench {
         );
         ensure!(
             info.bit_depth == png::BitDepth::Eight,
-            "texture bitdepth not 8"
+            "unimplemented: texture bitdepth not 8"
         );
 
         // Allocate the output buffer.
@@ -60,11 +61,17 @@ impl Blockbench {
                 pixels.swap(i, i + 2);
             }
         } else {
-            bail!("unimplemented color_type {:?}", info.color_type);
+            bail!("unimplemented: color_type {:?}", info.color_type);
         }
 
         for e in &bb.elements {
-            ensure!(e.autouv == 0, "autouv not 0");
+            ensure!(e.autouv == 0, "unimplemented: autouv not 0");
+            ensure!(!e.locked, "unimplemented: locked not false");
+            ensure!(
+                e.name == "cube",
+                "unimplemented: different name {:?}",
+                e.name
+            );
         }
 
         let mut found_non_zero = false;
@@ -75,13 +82,13 @@ impl Blockbench {
             }
         }
         if !found_non_zero {
-            bail!("all 0's?");
+            bail!("image is all 0's?");
         }
 
         Ok(Self { pixels, bb })
     }
 
-    pub fn register_model(mut self) {
+    pub fn register_model(mut self, name: &str) {
         let bmp = Bitmap {
             Scan0: self.pixels.as_mut_ptr(),
             Width: self.bb.resolution.width as c_int,
@@ -93,22 +100,10 @@ impl Blockbench {
         // east is left
         // top is top
         for e in self.bb.elements {
-            let sw = (e.faces.east.uv[2] as i32 - e.faces.east.uv[0] as i32).abs();
-            let bh = (e.faces.east.uv[3] as i32 - e.faces.east.uv[1] as i32).abs();
-            let bw = (e.faces.up.uv[0] as i32 - e.faces.up.uv[2] as i32).abs();
-
-            parts.push(Cube {
-                from: e.from,
-                to: e.to,
-                tex_x: e.uv_offset.map(|a| a[0]).unwrap_or(0) as _,
-                tex_y: e.uv_offset.map(|a| a[1]).unwrap_or(0) as _,
-                tex_sides_w: sw as _,
-                tex_body_w: bw as _,
-                tex_body_h: bh as _,
-            });
+            parts.push(Cube::from_bbmodel_element(e));
         }
 
-        Model::register(&self.bb.name, bmp, parts);
+        Model::register(&name, bmp, parts);
     }
 }
 
